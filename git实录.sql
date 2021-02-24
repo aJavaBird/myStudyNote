@@ -301,5 +301,13 @@ git log -p --pretty=format:"%ai , %an: %s" --since="38 day ago" >> D:/tmp/commit
 git init
 git remote add origin https://github.com/aJavaBird/myStudyNote.git
 git add .
-git commit -m "add a project to github,for test"
+git commit -m "我的学习笔记"
 git push origin master
+
+# 新加leetCode刷题项目（需要先创建repositories：LeetCode）
+git init
+git remote add origin https://github.com/aJavaBird/LeetCode.git
+git add .
+git commit -m "LeetCode刷题项目"
+git push origin master
+

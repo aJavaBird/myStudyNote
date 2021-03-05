@@ -311,3 +311,8 @@ git add .
 git commit -m "LeetCode刷题项目"
 git push origin master
 
+
+# 查看当前git项目所有分支的创建信息：
+git for-each-ref --format='%(color:cyan)%(authordate:format:%Y-%m-%d %I:%M %p) %(align:25,left)%(color:yellow)%(authorname)%(end) %(color:reset)%(refname:strip=3)' --sort=authordate refs/remotes
+
+

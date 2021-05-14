@@ -1,0 +1,497 @@
+
+# 下载 elasticsearch 
+wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.2.2.tar.gz
+
+# 下载jdk8
+wget --no-check-certificate --no-cookies --header "Cookie: oraclelicense=accept-securebackup-cookie"  http://download.oracle.com/otn-pub/java/jdk/8u131-b11/d54c1d3a095b4ff2b6607d096fa80163/jdk-8u131-linux-x64.tar.gz
+
+tar -zxvf elasticsearch-6.2.2.tar.gz
+
+# down spring-data-elasticsearch 代码，使用的是 3.1.x 版本，对应的 elasticsearch 版本是 6.2.2
+下载windows的es链接 : https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.2.2.zip
+下载源码包链接 : https://github.com/spring-projects/spring-data-elasticsearch/archive/3.1.9.RELEASE.zip
+
+# 参考的code : 
+https://github.com/whiney/springboot-elasticsearch  （没啥东西，弃用）
+https://github.com/spring-projects/spring-data-elasticsearch/releases/tag/3.1.9.RELEASE
+
+# 修改es，指定jdk 版本 vim bin/elasticsearch
+
+export JAVA_HOME=/home/sms/jdk1.8.0_11/
+export PATH=$JAVA_HOME/bin:$PATH
+if [ -x "$JAVA_HOME/bin/java" ]; then
+        JAVA="/home/sms/jdk1.8.0_11/bin/java"
+else
+        JAVA=`which java`
+fi
+
+# 修改后，还是有报错 : the minimum required Java version is 8; your Java version from [/jdk17/jre] does not meet this requirement
+# 解决办法 : 取消对 elasticsearch 的修改，修改文件 elasticsearch-env，在给JAVA变量赋值前，加入以下语句 : 
+export JAVA_HOME=/home/sms/jdk1.8.0_11/
+export PATH=$JAVA_HOME/bin:$PATH
+
+# windows 下的 elasticsearch 则修改 elasticsearch-env.bat
+set JAVA_HOME=D:\Program Files\Java\jdk1.8.0_31
+set PATH=%JAVA_HOME%\bin;%PATH%
+
+# 运行 elasticsearch
+/home/sms/elasticsearch-6.2.2/bin/elasticsearch
+# 运行 elasticsearch（守护进程）
+/home/sms/elasticsearch-6.2.2/bin/elasticsearch -d -p pid
+# 关闭 elasticsearch
+kill `cat /home/sms/elasticsearch-6.2.2/pid`
+
+# windows 运行 elasticsearch : elasticsearch.bat
+
+# 报错 NoNodeAvailableException[None of the configured nodes are available
+# 修改 elasticsearch.yml 增加 集群名称，之后重启 elasticsearch
+cluster.name: tzl_es_cluster
+
+# 报错 failed to process cluster event (create-index [test], cause [auto(bulk api)]) within 1m
+# 修改 jvm.options 文件，之后重启 elasticsearch
+-Xss128m
+
+# 测试 elasticsearch 安装情况
+curl http://127.0.0.1:9200/
+# http://127.0.0.1:9200/
+
+# 集群健康状况
+curl -X GET "127.0.0.1:9200/_cat/health?v"
+# 127.0.0.1:9200/_cat/health?v
+
+# 集群节点列表
+curl -X GET "127.0.0.1:9200/_cat/nodes?v"
+# 127.0.0.1:9200/_cat/nodes?v
+
+# 127.0.0.1:9200/i_smssendrecord/_delete_by_query
+# Headers : Content-Type: application/json
+# body > row : {"query": {"match_all": {}}}
+
+# curl -X POST "localhost:9200/i_smssendrecord/smsSendRecord/_delete_by_query?conflicts=proceed" -H 'Content-Type: application/json' -d '{"query": {"match_all": {}}}'
+# curl -X POST "localhost:9200/i_smssendrecord/smsSendRecord/_update_by_query?conflicts=proceed" -H 'Content-Type: application/json' -d '{"query": {"match_all": {}}}'
+
+删除索引
+# curl -H 'Content-Type: application/json' -X DELETE "127.0.0.1:9200/i_smssendrecord/" 
+
+
+# 报错 org.elasticsearch.index.mapper.MapperParsingException: analyzer [ik_max_word] not found for field [...]
+# 需要安装 analyzer 分词插件，参考 https://github.com/medcl/elasticsearch-analysis-ik 的说明，进入 D:\myWork\elasticsearch-6.2.2\bin 目录，执行：
+elasticsearch-plugin install https://github.com/medcl/elasticsearch-analysis-ik/releases/download/v6.2.2/elasticsearch-analysis-ik-6.2.2.zip
+# linux 上则是 : ./bin/elasticsearch-plugin install https://github.com/medcl/elasticsearch-analysis-ik/releases/download/v6.2.2/elasticsearch-analysis-ik-6.2.2.zip
+# 安装分词前 plugins 目录里面没有内容，安装完成后，发现里面多了一个名为 analysis-ik 的文件夹
+
+-- 分词测试 : curl -X POST "http://127.0.0.1:9200/_analyze" -H 'Content-Type: application/json' -d '{"analyzer":"ik_max_word","text":"短信测试,联想是全球最大的笔记本厂商" }'
+
+
+# 导入项目 tzl-es ，修改数据库配置，执行initSql下的sql语句，先运行 SmsSendRecordTest.initSmsData()，再运行 其他
+# 查询新插入的数据
+
+# 本机测试 : iniSmsData 每小时同步300w条数据
+
+# 报错处理：QueryPhaseExecutionException: Result window is too large, from + size must be less than or equal to: [10000] but was [11000]
+curl -H "Content-Type: application/json" -XPUT http://127.0.0.1:9200/i_smssendrecord/_settings -d '{ "index" : { "max_result_window" : 100000000}}'
+# 其中 i_smssendrecord 是我的 index 名称
+
+# 查看索引配置：
+curl -H "Content-Type: application/json" -PUT http://127.0.0.1:9200/i_smssendrecord/_settings
+# 查看字段
+curl -H "Content-Type: application/json" -PUT http://127.0.0.1:9200/i_smssendrecord/_mappings
+
+
+
+
+##################################################################################### cannal 配置 start #########################################################################
+/*
+-- vi /etc/my.cnf -- 必须有以下这些项
+server-id=1
+log-bin=mysql-bin # 此处可以是log目录
+binlog_format=row
+# binlog_row_image=FULL
+*/
+
+/*
+-- 130 上的 log-bin 配置（vi /etc/my.cnf） : 
+server-id = 172301580
+log-bin = /data/logs/binlog/localhost.localdomain-bin.log
+binlog_format = ROW
+*/
+
+-- 重启mysql （因为 130 数据库配置是对的，不需要重启）
+service mysqld stop
+mysqld --defaults-file=/etc/my.cnf --user=mysql
+
+-- sql查看是否启用了日志
+show variables like 'log_bin';
+-- sql查看MySQLbinlog模式
+show global variables like "binlog%";
+-- 查看连接的主机有哪些
+SELECT substring_index(host, ':',1) AS host_name,state,count(*) FROM information_schema.processlist GROUP BY state,host_name;
+
+create user canal IDENTIFIED BY 'canal';
+grant all PRIVILEGES on *.* to canal@'127.0.0.1'  identified by 'canal';
+grant all PRIVILEGES on *.* to canal@'localhost'  identified by 'canal';
+grant all PRIVILEGES on *.* to canal@'172.30.13.64'  identified by 'canal';   -- 172.30.13.64 是部署cannal 的主机ip
+grant all PRIVILEGES on *.* to canal@'172.25.1.2'  identified by 'canal';     -- 172.25.1.2 是开发 的主机ip
+FLUSH PRIVILEGES;
+# 重新配置权限
+DELETE FROM mysql.user where User='canal';
+FLUSH PRIVILEGES;
+create user canal IDENTIFIED BY 'canal';
+grant SELECT, REPLICATION SLAVE, REPLICATION CLIENT on *.* to canal@'172.30.13.64'  identified by 'canal';   -- 172.30.13.64 是部署cannal 的主机ip
+grant SELECT, REPLICATION SLAVE, REPLICATION CLIENT on *.* to canal@'172.25.1.2'  identified by 'canal';     -- 172.25.1.2 是开发 的主机ip
+FLUSH PRIVILEGES;
+
+-- 下载cannel  （wget 加上 -c -O canal.deployer-1.1.2.tar.gz 这个选项，是为了解决 Cannot write to 问题，解决这个问题只需要把下载的文件输出为一个固定的文件名）
+wget -c -O canal.deployer-1.1.2.tar.gz https://github.com/alibaba/canal/releases/download/canal-1.1.2/canal.deployer-1.1.2.tar.gz
+-- 解压缩
+mkdir /home/sms/canal-1.1.2
+tar -zxvf canal.deployer-1.1.2.tar.gz -C /home/sms/canal-1.1.2
+
+-- 修改cannal配置文件，conf/canal.properties 是主配置文件，conf/example/instance.properties 为数据库配置文件
+-- 我们不直接使用 example，复制 example 文件夹，命名为 sms
+-- 修改 conf/canal.properties，将配置项【canal.destinations】从 example 改为 sms
+-- 修改 conf/sms/instance.properties 见下:
+
+# slaveId 不能与 my.cnf 中的 server-id 项重复
+canal.instance.mysql.slaveId = 333
+canal.instance.master.address = 172.30.1.130:3306
+canal.instance.dbUsername = canal
+canal.instance.dbPassword = canal
+canal.instance.connectionCharset = UTF-8
+# 订阅实例中的数据库和表
+# canal.instance.filter.regex = .*\\..*
+canal.instance.filter.regex = sms.sms_main_send_record
+
+-- 启动canal
+/home/sms/canal-1.1.2/bin/startup.sh
+-- 关闭canal
+/home/sms/canal-1.1.2/bin/stop.sh
+
+-- 启动cannal，查看 /home/sms/canal-1.1.2/logs/sms/sms.log，如果没有异常，则cannal启动成功
+
+-- 如果想让 canal 从当前时间为起点进行同步（之前的数据不同步了），则进入实例文件夹，把 h2.mv.db 和 meta.dat 删了（instance.properties）不能删。
+-- 比如 进入 canal-1.1.2/conf/sms/ 路径下，删除 h2.mv.db 和 meta.dat
+
+/**
+// 创建canal链接
+static CanalConnector connector = CanalConnectors.newSingleConnector(new InetSocketAddress("172.30.13.64", 11111),"sms", "", "");
+*/    
+
+##################################################################################### cannal 配置 end #########################################################################
+
+
+
+
+
+################################################# 64的es和线上的es 重建索引  start #################################################
+
+-- 为什么要重建：因为64 和线上 的es部署完之后，并没有下载安装分词器插件，导致 content 字段根据 内容查不好查
+
+-- 重建前操作 : 安装分词器插件（语句如下），重启 es
+./bin/elasticsearch-plugin install https://github.com/medcl/elasticsearch-analysis-ik/releases/download/v6.2.2/elasticsearch-analysis-ik-6.2.2.zip
+-- 分词测试 : 
+curl -X POST "http://127.0.0.1:9200/_analyze" -H 'Content-Type: application/json' -d '{"analyzer":"ik_max_word","text":"短信测试,联想是全球最大的笔记本厂商" }'
+
+-- 参考 https://javasgl.github.io/elastic-search-reindex/
+-- 关闭 tzl-es（为了避免同步数据时存在数据漏同步情况）后，执行以下3个操作
+-- 创建目标索引
+curl -H 'Content-Type: application/json' -XPUT 'http://127.0.0.1:9200/i_smssendrecord_new'
+-- 创建 mapping
+curl -H 'Content-Type: application/json' -XPUT 'http://127.0.0.1:9200/i_smssendrecord_new/smsSendRecord/_mapping' -d '{"smsSendRecord":{"properties":{"channelId":{"type":"long"},"content":{"type":"text","analyzer":"ik_max_word"},"id":{"type":"long"},"phoneNum":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"platformCode":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"requestIp":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"result":{"type":"long"},"resultDetail":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"sendAt":{"type":"long"},"serialNum":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"serviceCode":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"tpMsgId":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"tripartiteResult":{"type":"long"},"tripartiteResultDetail":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}}}}}'
+-- 使用 reindex 将原来的索引重建到新的索引上
+curl -H 'Content-Type: application/json' -X POST 'http://127.0.0.1:9200/_reindex' -d '{"source": {"index": "i_smssendrecord"},"dest": {"index": "i_smssendrecord_new" }}'
+-- 测试新索引
+-- i_smssendrecord 没有分词，查询不到数据，i_smssendrecord_new 有分词，可查询到数据
+curl -X POST "127.0.0.1:9200/i_smssendrecord_new/_search" -H 'Content-Type: application/json' -d '{"query": {"bool": {"must": [{ "match": { "tripartiteResult": "-1" }},{ "match": { "content": {"query":"短信测试","analyzer":"ik_max_word"} }} ] }}}'
+-- 测试新索引
+curl -X POST "127.0.0.1:9200/i_smssendrecord_new/_search" -H 'Content-Type: application/json' -d '{"query": {"bool": {"must": [{ "match": { "tripartiteResult": "-1" }},{ "match": { "content": "短信测试" }} ] }}}'
+-- 修改别名
+curl -H 'Content-Type: application/json' -X POST 'http://127.0.0.1:9200/_aliases' -d '{"actions": [ {"add": {"index": "i_smssendrecord_new","alias": "i_smssendrecord"}}, { "remove_index": {"index": "i_smssendrecord"}} ]}'
+-- 测试一下
+curl -X POST "127.0.0.1:9200/i_smssendrecord/_search" -H 'Content-Type: application/json' -d '{"query": {"bool": {"must": [{ "match": { "tripartiteResult": "-1" }},{ "match": { "content": "短信测试" }} ] }}}'
+
+################################################# 64的es和线上的es 重建索引  end #################################################
+
+
+
+-- 查看有哪些索引: curl -X GET  "127.0.0.1:9200/_cat/indices?v"
+# 查看索引配置：
+curl -H "Content-Type: application/json" -PUT http://127.0.0.1:9200/i_smssendrecord_v2/_settings
+curl -H "Content-Type: application/json" -PUT http://127.0.0.1:9200/i_smssendrecord_v2/_mappings
+# 查看索引别名
+curl -X GET "http://127.0.0.1:9200/i_smssendrecord_v2/_alias"
+
+
+################################################# 64的es和线上的es 重建索引v2  start #################################################
+
+-- 部分内容已在v1说明，此处不再赘述。
+-- es内容精确匹配 : http://www.voidcn.com/article/p-uhfqufch-ur.html
+
+-- 删除索引 : curl -XDELETE 'http://127.0.0.1:9200/i_smssendrecord_v2' -H 'Content-Type: application/json'
+
+-- 实现一字一词的的分词器是NGram : 
+-- 测试分词器ngram : 
+curl -X POST "http://127.0.0.1:9200/_analyze" -H 'Content-Type: application/json' -d '{"tokenizer":"ngram","text":"联想是全球最大的笔记本厂商" }'
+-- curl -X POST "http://127.0.0.1:9200/_analyze" -H 'Content-Type: application/json' -d '{"analyzer":"ik_max_word","text":"联想是全球最大的笔记本厂商" }'
+
+-- 关闭 tzl-es（为了避免同步数据时存在数据漏同步情况）后，执行以下3个操作
+-- 创建目标索引
+curl -H 'Content-Type: application/json' -XPUT 'http://127.0.0.1:9200/i_smssendrecord_v2' -d '{"settings":{"index":{"max_result_window":"100000000"},"analysis": { "analyzer": { "ngram_tzl": { "tokenizer": "ngram_tokenizer" }}, "tokenizer": {"ngram_tokenizer": { "type": "nGram", "min_gram": "1", "max_gram": "1", "token_chars": [ "letter", "digit", "punctuation" ] } } }}}'
+
+-- 测试新索引分词 ngram_tzl
+curl -X POST "http://127.0.0.1:9200/i_smssendrecord_v2/_analyze" -H 'Content-Type: application/json' -d '{"analyzer":"ngram_tzl","text":"联想是全球最大的笔记本厂商" }'
+
+-- 创建 mapping
+curl -H 'Content-Type: application/json' -XPUT 'http://127.0.0.1:9200/i_smssendrecord_v2/smsSendRecord/_mapping' -d '{"smsSendRecord":{"properties":{"channelId":{"type":"long"},"content":{"type":"text","analyzer":"ngram_tzl"},"id":{"type":"long"},"phoneNum":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"platformCode":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"requestIp":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"result":{"type":"long"},"resultDetail":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"sendAt":{"type":"long"},"serialNum":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"serviceCode":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"tpMsgId":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}},"tripartiteResult":{"type":"long"},"tripartiteResultDetail":{"type":"text","fields":{"keyword":{"type":"keyword","ignore_above":256}}}}}}'
+
+-- 使用 reindex 将原来的索引重建到新的索引上 （线上1.8千万条数据花了45min 左右）
+curl -H 'Content-Type: application/json' -X POST 'http://127.0.0.1:9200/_reindex' -d '{"source": {"index": "i_smssendrecord"},"dest": {"index": "i_smssendrecord_v2" }}'
+
+-- 测试新索引
+curl -X POST "127.0.0.1:9200/i_smssendrecord_v2/_search" -H 'Content-Type: application/json' -d '{"query": {"bool": {"must": [{ "match": { "tripartiteResult": "-1" }},{"multi_match": {"query": "您的申请因综合评分不足暂未通过审核","type": "phrase","slop": 0,"fields": ["content"],"max_expansions": 1 }} ] }}}'
+
+-- 修改别名
+curl -H 'Content-Type: application/json' -X POST 'http://127.0.0.1:9200/_aliases' -d '{"actions": [ {"add": {"index": "i_smssendrecord_v2","alias": "i_smssendrecord"}}, { "remove_index": {"index": "i_smssendrecord"}} ]}'
+
+-- 测试一下
+curl -X POST "127.0.0.1:9200/i_smssendrecord/_search" -H 'Content-Type: application/json' -d '{"query": {"bool": {"must": [{ "match": { "tripartiteResult": "-1" }},{"multi_match": {"query": "短信测试","type": "phrase","slop": 0,"fields": ["content"],"max_expansions": 1 }} ] }}}'
+-- 测试一下（id倒序查询2条）
+curl -X POST "127.0.0.1:9200/i_smssendrecord/_search" -H 'Content-Type: application/json' -d '{"query": {"match_all": {}} , "size": 2 , "sort": [{"id": {"order": "desc"}}]}'
+-- 测试一下（一般查询）
+curl -X POST "127.0.0.1:9200/i_smssendrecord/_search" -H 'Content-Type: application/json' -d '{"query": {"bool": {"must": [{ "match": { "tripartiteResult": "-1" }},{ "match": { "phoneNum": "15685260003" }} ] }} , "size": 2 , "sort": [{"id": {"order": "desc"}}]}}'
+
+
+################################################# 64的es和线上的es 重建索引v2  end #################################################
+
+
+
+
+
+
+
+####################################################  ELK 配置 start ##########################################################
+
+######################## es 集群配置 start ##########################
+
+# 操作主机 172.30.15.11 , 172.30.15.14
+# 在 2 个主机下面建立目录 : mkdir ~/ELK && cd ~/ELK
+
+# 下载jdk8 （2个主机）
+wget --no-check-certificate --no-cookies --header "Cookie: oraclelicense=accept-securebackup-cookie"  http://download.oracle.com/otn-pub/java/jdk/8u131-b11/d54c1d3a095b4ff2b6607d096fa80163/jdk-8u131-linux-x64.tar.gz
+mv jdk-8u131-linux-x64.tar.gz\?AuthParam\=1564712009_baf4c11a808ef2091291afa80b0111bb jdk-8u131-linux-x64.tar.gz
+tar -zxvf jdk-8u131-linux-x64.tar.gz
+
+# 下载 elasticsearch （2个主机）
+wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.2.2.tar.gz
+tar -zxvf elasticsearch-6.2.2.tar.gz
+
+# 配置es （11主机）
+vi elasticsearch-6.2.2/bin/elasticsearch
+	export JAVA_HOME=/home/p2p/ELK/jdk1.8.0_131
+	export PATH=$JAVA_HOME/bin:$PATH
+	if [ -x "$JAVA_HOME/bin/java" ]; then
+	        JAVA="/home/p2p/ELK/jdk1.8.0_131/bin/java"
+	else
+	        JAVA=`which java`
+	fi
+
+vi elasticsearch-6.2.2/bin/elasticsearch-env : 
+	export JAVA_HOME=/home/p2p/ELK/jdk1.8.0_131/
+	export PATH=$JAVA_HOME/bin:$PATH
+
+vi elasticsearch-6.2.2/config/jvm.options
+	-Xss128m
+
+vi elasticsearch-6.2.2/config/elasticsearch.yml       （11 主机配置，非主节点）
+	cluster.name: tzl_es_cluster
+	node.name: node-15.11
+	node.master: false
+	node.data: true
+	network.host: 0.0.0.0
+	discovery.zen.ping.unicast.hosts: ["172.30.15.11", "172.30.15.14"]
+	bootstrap.memory_lock: false
+	bootstrap.system_call_filter: false
+
+vi elasticsearch-6.2.2/config/elasticsearch.yml       （14 主机配置，主节点）
+	cluster.name: tzl_es_cluster
+	node.name: node-15.14
+	node.master: true
+	node.data: true
+	network.host: 0.0.0.0
+	discovery.zen.ping.unicast.hosts: ["172.30.15.11", "172.30.15.14"]
+	bootstrap.memory_lock: false
+	bootstrap.system_call_filter: false
+
+# 运行 elasticsearch（守护进程）
+/home/p2p/ELK/elasticsearch-6.2.2/bin/elasticsearch -d -p pid
+# 关闭 elasticsearch
+kill `cat /home/p2p/ELK/elasticsearch-6.2.2/pid`
+
+# 运行es报错 : max virtual memory areas vm.max_map_count [65530] is too low, increase to at least [262144]
+echo 'vm.max_map_count=262144' >> /etc/sysctl.conf
+/sbin/sysctl -p        （不重启而使设置生效）
+sysctl -a|grep vm.max_map_count         （查看设置是否生效）
+
+# 运行es报错 :  max file descriptors [4096] for elasticsearch process is too low, increase to at least [65535]
+vim /etc/security/limits.conf        （修改后需要重新断开后再连上）
+	* soft nofile 65536
+	* hard nofile 65536
+# 查看当前用户软限制: ulimit -S -n    查看当前用户的硬限制: ulimit -H -n
+
+# 其他环境问题参考: https://blog.csdn.net/lixiaohai_918/article/details/89569611
+
+# 测试 elasticsearch 安装情况
+curl http://127.0.0.1:9200/
+# 集群健康状况
+curl -X GET "127.0.0.1:9200/_cat/health?v"
+# 集群节点列表
+curl -X GET "127.0.0.1:9200/_cat/nodes?v"
+# 查看有哪些索引: 
+curl -X GET  "127.0.0.1:9200/_cat/indices?v"
+# 查看索引配置：
+curl -H "Content-Type: application/json" -PUT http://127.0.0.1:9200/i_smssendrecord_v2/_settings
+curl -H "Content-Type: application/json" -PUT http://127.0.0.1:9200/i_smssendrecord_v2/_mappings
+
+######################## es 集群配置 end   ##########################
+
+
+######################## logstash 配置 start ##########################
+
+# 下载 Logstash （14主机）
+wget https://artifacts.elastic.co/downloads/logstash/logstash-6.2.2.tar.gz
+tar -zxvf logstash-6.2.2.tar.gz
+
+vi logstash-6.2.2/config/logstash.yml
+
+node.name: logstach-15.14    # 设置节点名称
+# path.data: /home/p2p/ELK/logstash-6.2.2/data    # 创建logstash 和插件使用的持久化目录
+config.reload.automatic: true    # 开启配置文件自动加载
+config.reload.interval: 10    # 定义配置文件重载时间周期，单位s
+
+# 配置 logstash java运行环境:
+vi logstash-6.2.2/bin/logstash （在首行或者次行加入一下两句）
+	export JAVA_CMD="/home/p2p/ELK/jdk1.8.0_131/bin"
+	export JAVA_HOME="/home/p2p/ELK/jdk1.8.0_131"
+
+# 测试一下，新加配置文件
+touch logstash-6.2.2/showXindaiOnConsole.conf && vi logstash-6.2.2/showXindaiOnConsole.conf
+input {
+	file{
+		path => "/home/p2p/allApplication/xindai-core-1.0/stdout.log"
+	}
+}
+output {
+	stdout {
+		codec => rubydebug  # 将日志输出到当前的终端上显示
+	}
+}
+# 运行: logstash-6.2.2/bin/logstash -f logstash-6.2.2/showXindaiOnConsole.conf
+
+# 测试一下，新加配置文件
+touch logstash-6.2.2/showXindaiOnEs.conf && vi logstash-6.2.2/showXindaiOnEs.conf
+input {
+	file{
+		path => "/home/p2p/allApplication/xindai-core-1.0/stdout.log"
+	}
+}
+output {
+	elasticsearch {
+		hosts => ["172.30.15.11:9200", "172.30.15.14:9200"]
+		manage_template => true
+		template_overwrite => true
+	}
+}
+# 运行: logstash-6.2.2/bin/logstash -f logstash-6.2.2/showXindaiOnEs.conf
+
+通过es 查询刚刚存入的日志: 
+curl -H "Content-Type: application/json" -PUT http://172.30.15.14:9200/logstash-2019.08.02/_settings
+curl -H "Content-Type: application/json" -PUT http://172.30.15.14:9200/logstash-2019.08.02/_mappings
+curl -X POST "172.30.15.14:9200/logstash-2019.08.02/_search" -H 'Content-Type: application/json' -d '{"query": {"match_all": {}} , "size": 2 , "sort": [{"@timestamp": {"order": "desc"}}]}'
+
+
+# 自定义正则（grok的正则表达式是用来格式化的，并不是用来过滤的）
+# 新加配置文件，当日志中有 HydraFilter 时，则不保存
+touch logstash-6.2.2/showXindaiOnEs2.conf && vi logstash-6.2.2/showXindaiOnEs2.conf
+input {
+	file{
+		path => "/home/p2p/allApplication/xindai-core-1.0/stdout.log"
+	}
+#	stdin { }   # 接收从当前终端的输入
+}
+filter {
+	if ([message] =~ "^.*HydraFilter.*$") {
+        drop {}
+    } else if ([message] =~ "^.*YcQueryServiceImpl.*$") {
+    	# 仅匹配包含某个字符串的
+    	# 此处可以写 grok、ruby 等语句匹配
+    } else {
+    	drop {}
+    }
+}
+output {
+	elasticsearch {
+		hosts => ["172.30.15.11:9200", "172.30.15.14:9200"]
+		manage_template => true
+		template_overwrite => true
+	}
+#	stdout {
+#		codec => rubydebug
+#	}
+}
+# 运行: logstash-6.2.2/bin/logstash -f logstash-6.2.2/showXindaiOnEs2.conf
+
+删除索引 后再查
+# curl -H 'Content-Type: application/json' -X DELETE "http://172.30.15.14:9200/logstash-2019.08.02/"
+
+# grok正则表达式测试地址（测试过了再使用）: https://grokdebug.herokuapp.com/
+
+######################## logstash 配置 end   ##########################
+
+
+######################## Kibana 配置 start ##########################
+
+# kibana 是绿色软件，下载，小修改一下配置，启动就行
+# 下载 Kibana （14主机）
+wget https://artifacts.elastic.co/downloads/kibana/kibana-6.2.2-linux-x86_64.tar.gz
+tar -zxvf kibana-6.2.2-linux-x86_64.tar.gz
+mv kibana-6.2.2-linux-x86_64 kibana-6.2.2
+
+vim/etc/kibana/kibana.yml 
+# server.port: 5601   # 监听端口
+server.host: "172.30.15.14"   # 监听IP地址，建议内网ip 
+elasticsearch.url: "http://172.30.15.14:9200"    # elasticsearch连接kibana的URL，也可以填写192.168.1.32，因为它们是一个集群
+
+# 启动 kibana
+~/ELK/kibana-6.2.2/bin/kibana
+# 后台启动
+nohup ~/ELK/kibana-6.2.2/bin/kibana &
+
+# 访问一下: http://172.30.15.14:5601
+# 选择Discover，新建一个搜索，保存搜索，之后便可以查看日志了（kibana的日志分页查看在 右上角）
+
+# Discover：日志管理视图  主要进行搜索和查询
+# Visualize：统计视图      构建可视化的图表
+# Dashboard：仪表视图    将构建的图表组合形成图表盘
+# Timelion：时间轴视图    随着时间流逝的数据
+# APM：性能管理视图      应用程序的性能管理系统
+
+# 将安装包备份 （两个主机都执行）
+mkdir ~/ELK/bak && mv ~/ELK/*.tar.gz ~/ELK/bak
+
+######################## Kibana 配置 end   ##########################
+
+
+
+####################################################  ELK 配置 end   ##########################################################
+
+
+
+
+
+################################################### 查询语句 start ###################################################
+
+# 线上定时任务执行前查询语句 （线上size 是 1000，这里写了2）
+curl -X POST "127.0.0.1:9200/i_smssendrecord/_search" -H 'Content-Type: application/json' -d '{"query": {"bool": {"must": [{ "match": { "tripartiteResult": "-1" }},{ "match": { "result": "1" }},{"range" : {"sendAt": {"from": "1568770588328","to": "1568943388328"}}} ] }}, "sort": [{"id": {"order": "asc"}}], "size": 2,"from": 0}'
+
+
+################################################### 查询语句 end ###################################################
